@@ -23,17 +23,20 @@ void server(){
 		printf("Buffer is %s\n",buf);
 		if (strcmp(buf,"Push")==0){
 			read(fds[0],buf,32);
-			kill(pid,SIGCONT);
 			while (strcmp(buf,"-x")==0){
+				sleep(3);
 				read(fds[0],buf,32);
+				printf("Buffer is %s",buf);
 			}
+
 			sscanf(buf,"%d",reading_input);
+			printf("Number:%d",reading_input);
 			push(reading_input);
 			printf("Push %d command",reading_input);
 		}
 		else if (strcmp(buf,"Pop")==0){
 			printf("Pop command \n");
-			pop();
+			pop();	
 		}
 		else if (strcmp(buf,"Peek")==0){
 			printf("Peek command: %d \n",peek());
@@ -46,8 +49,9 @@ void server(){
 			display();
 		}
 		else if (strcmp(buf,"Create")==0){
+			printf("Create stack \n");
 			create();
-			printf("Create stack ");
+			
 		}
 		else if (strcmp(buf,"Stack size")==0){
 			printf("Stack size command ");
@@ -86,8 +90,8 @@ void client(){
 				found = 1;
 				write(fds[1],buf,32);
 				if (commands_with_input[i]){
-					printf("Input is:");
 					scanf("%s",buf);
+					printf("%s buf is",buf);
 					write(fds[1],buf,32);
 				}
 				break;
@@ -96,6 +100,7 @@ void client(){
 		if (!found){
 			printf("Command not found, please try again:\n");
 		}
+		sleep(2);
 	}
 }
 
