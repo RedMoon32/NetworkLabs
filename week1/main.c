@@ -9,98 +9,62 @@
 int fds[2];
 int pid;
 int child_status;
-
-char commands[7][30] = {"Push","Pop","Peek","IsEmpty","Display","Create","Stack_Size"};
-int commands_with_input[7]= {1,0,0,0,0,0,0};
+struct stack* st = NULL;
 
 void server(){
 	char buf[256];
-	int reading_input = 0;
-	while (1){
+
+	while(1){
 		close(fds[1]);
 		read(fds[0],buf,32);
-		write(fds[0],"-x",32);
-		printf("Buffer is %s\n",buf);
-		if (strcmp(buf,"Push")==0){
-			read(fds[0],buf,32);
-			while (strcmp(buf,"-x")==0){
-				sleep(3);
-				read(fds[0],buf,32);
-				printf("Buffer is %s",buf);
+		if (strncmp(buf,"push",4)==0){
+			int v = 0;
+			int i = 5;
+			while (buf[i] != '\n' && buf[i]!='\0') {
+				printf("%c ",buf[i]);
+				v *= 10;
+				v += (int)(buf[i] - 48);
+				i++;
 			}
-
-			sscanf(buf,"%d",reading_input);
-			printf("Number:%d",reading_input);
-			push(reading_input);
-			printf("Push %d command",reading_input);
+			push(st,v);
+			printf("Pushed %d on stack.\n", v);
 		}
-		else if (strcmp(buf,"Pop")==0){
-			printf("Pop command \n");
-			pop();	
+		else if (strncmp(buf,"pop",3)==0){
+			printf("Pop command\n");
+			pop(st);
 		}
-		else if (strcmp(buf,"Peek")==0){
-			printf("Peek command: %d \n",peek());
+		else if (strncmp(buf,"create",5)==0){
+			st = create();
+			printf("Empty stack initialized\n");
 		}
-		else if (strcmp(buf,"IsEmpty")==0){
-			printf("Is empty: %d \n",empty());
+		else if (strncmp(buf,"peek",4)==0){
+			printf("Peek command:%d\n",peek(st));
 		}
-		else if (strcmp(buf,"Display")==0){
-			printf("Display command: \n");
-			display();
+		else if (strncmp(buf,"isempty",7)==0){
+			printf("Is stack empty:%d\n",empty(st));
 		}
-		else if (strcmp(buf,"Create")==0){
-			printf("Create stack \n");
-			create();
-			
+		else if (strncmp(buf,"display",7)==0){
+			printf("Disply command\n");
+			display(st);
 		}
-		else if (strcmp(buf,"Stack size")==0){
-			printf("Stack size command ");
-			stack_size();
+		else if (strncmp(buf,"stack_size",10)==0){
+			printf("Stack size command\n");
+			stack_size(st);
 		}
 		else{
-			printf("No new command");
+			printf("Unknown command\n");
 		}
+		printf("=========\nNew command:\n");
 	}
 }
 
 void client(){
-
 	char buf[256];
-	int ncommands = 7;
-
-	printf("Available commands:\n");
-	for (int i=0;i<ncommands;i++){
-		printf("%s ",commands[i]);
-	}
-	printf("\n");
-	close(fds[0]);
-	while (1){
-		printf("=============\nCommand is: ");
-		scanf("%s",buf);
-		int found = 0;
-
-		if (strcmp(buf,"exit") == 0){
-			printf("Exiting");
-			return;
-		}
-
-		for (int i=0;i<ncommands;i++){
-			int cmp = strcmp(buf,commands[i]);
-			if (cmp==0){
-				found = 1;
-				write(fds[1],buf,32);
-				if (commands_with_input[i]){
-					scanf("%s",buf);
-					printf("%s buf is",buf);
-					write(fds[1],buf,32);
-				}
-				break;
-			}
-		}
-		if (!found){
-			printf("Command not found, please try again:\n");
-		}
-		sleep(2);
+	printf("Available commands: push NUMBER, pop, peek, isempty, display, create, stack_size\nNew command:\n");
+	while(1){
+		close(fds[0]);
+		fgets(buf,32,stdin);
+		write(fds[1],buf,32);
 	}
 }
 

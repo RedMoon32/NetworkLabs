@@ -11,11 +11,11 @@ struct Node {
 	struct Node* next;
 
 };
-extern struct stack* st;
-int peek();
-void push(int data);
-void pop();
-int empty();
-void display();
-void create();
-void stack_size();
+
+int peek(struct stack* st);
+void push(struct stack* st,int data);
+void pop(struct stack* st);
+int empty(struct stack* st);
+void display(struct stack* st);
+struct stack*  create();
+void stack_size(struct stack* st);
