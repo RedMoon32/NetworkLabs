@@ -17,11 +17,12 @@ void server(){
 	while(1){
 		close(fds[1]);
 		read(fds[0],buf,32);
+		kill(pid,SIGSTOP);
+		printf("----------------\n");
 		if (strncmp(buf,"push",4)==0){
 			int v = 0;
 			int i = 5;
 			while (buf[i] != '\n' && buf[i]!='\0') {
-				printf("%c ",buf[i]);
 				v *= 10;
 				v += (int)(buf[i] - 48);
 				i++;
@@ -54,6 +55,7 @@ void server(){
 		else{
 			printf("Unknown command\n");
 		}
+		kill(pid,SIGCONT);
 		printf("=========\nNew command:\n");
 	}
 }
