@@ -1,3 +1,3 @@
 # Network labs
-## Babichev Rinat
-## BS17-08
+**Babichev Rinat**  
+**BS17-08**  
