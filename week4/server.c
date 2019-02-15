@@ -160,7 +160,7 @@ setup_tcp_server_communication() {
                     /*Goto state machine State 1*/
                     break;/*Get out of inner while loop, server is done with this client, time to check for new connection request by executing selct()*/
                 }
-		printf("Got new student info:%s %u %s\n",client_data->name,client_data->age,client_data->group);
+		printf("Got new student info:\nName:%s\nAge:%u\nGroup:%s\n",client_data->name,client_data->age,client_data->group);
                 result_struct_t result;
                 strcpy(result.response,"Successfully received new student info");
 
