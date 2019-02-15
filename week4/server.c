@@ -7,7 +7,7 @@
 #include <netdb.h>
 #include <memory.h>
 #include <errno.h>
-#include <zconf.h>
+//#include <zconf.h>
 #include "common.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -148,22 +148,21 @@ setup_tcp_server_communication() {
 
                 }
 
-                test_struct_t *client_data = (test_struct_t *) data_buffer;
-
+                //test_struct_t *client_data = (test_struct_t *) data_buffer;
+		student* client_data = (student*) data_buffer;
                 /* If the client sends a special msg to server, then server close the client connection
                  * for forever*/
                 /*Step 9 */
-                if (client_data->a == 0 && client_data->b == 0) {
-
+                if (client_data->age==0) {
                     close(comm_socket_fd);
                     printf("Server closes connection with client : %s:%u\n", inet_ntoa(client_addr.sin_addr),
                            ntohs(client_addr.sin_port));
                     /*Goto state machine State 1*/
                     break;/*Get out of inner while loop, server is done with this client, time to check for new connection request by executing selct()*/
                 }
-
+		printf("Got new student info:%s %u %s\n",client_data->name,client_data->age,client_data->group);
                 result_struct_t result;
-                result.c = client_data->a + client_data->b;
+                strcpy(result.response,"Successfully received new student info");
 
                 /* Server replying back to client now*/
                 sent_recv_bytes = sendto(comm_socket_fd, (char *) &result, sizeof(result_struct_t), 0,

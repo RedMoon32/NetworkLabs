@@ -9,7 +9,7 @@
 #define DEST_PORT            2000
 #define SERVER_IP_ADDRESS   "127.0.0.1"
 
-test_struct_t client_data;
+student client_data;
 result_struct_t result;
 
 void setup_tcp_communication() {
@@ -52,11 +52,12 @@ void setup_tcp_communication() {
 
 	    /*Prompt the user to enter data*/
 	    /*You will want to change the promt for the second task*/
-	    printf("Enter a : ?\n");
-	    scanf("%u", &client_data.a);
-	    printf("Enter b : ?\n");
-	    scanf("%u", &client_data.b);
-	    
+	    printf("Enter name: ?\n");
+	    scanf("%s", client_data.name);
+	    printf("Enter age : ?\n");
+	    scanf("%u", &client_data.age);
+	    printf("Enter group: ?\n");
+	    scanf("%s",client_data.group);
 	    /*Code for task 2 goes here*/
 	    /*....*/
 	    
@@ -68,7 +69,7 @@ void setup_tcp_communication() {
 
 	    sent_recv_bytes = sendto(sockfd, 
 		   &client_data,
-		   sizeof(test_struct_t), 
+		   sizeof(student), 
 		   0, 
 		   (struct sockaddr *)&dest, 
 		   sizeof(struct sockaddr));
@@ -83,12 +84,11 @@ void setup_tcp_communication() {
 	    /*Code for task 2 goes here*/
 	    /*....*/
 
-	    sent_recv_bytes =  recvfrom(sockfd, (char *)&result, sizeof(result_struct_t), 0,
-		            (struct sockaddr *)&dest, &addr_len);
+	   sent_recv_bytes =  recvfrom(sockfd, (char *)&result, sizeof(result_struct_t), 0,
+	    	            (struct sockaddr *)&dest, &addr_len);
 
 	    printf("No of bytes received = %d\n", sent_recv_bytes);
-	    
-	    printf("Result received = %u\n", result.c);
+	    printf("Result received = %s\n", result.response);
     }
 }
     
