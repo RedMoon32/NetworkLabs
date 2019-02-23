@@ -7,7 +7,7 @@
 #include "common.h"
 
 #define PORT            2000
-#define SERVER "127.0.0.1"
+#define SERVER "192.168.2.22"
 
 student client_data;
 result_struct_t result;
