@@ -31,9 +31,19 @@ typedef struct Node{
     p_array_list files;
 }node;
 
+
 p_array_list nodes;
 node me;
 int main_sock;
+
+node* node_in_list(char* ip,char *port){
+    for (int i = array_list_iter(nodes);i!=-1;i=array_list_next(nodes,i)){
+        node* current = array_list_get(nodes,i);
+        if (strcmp(ip,current->ip)==0 & strcmp(port,current->port)==0)
+            return current;
+    }
+    return NULL;
+}
 
 void get_file_names(p_array_list nfiles){
     DIR *d;
@@ -64,7 +74,8 @@ node* create_node(char* name,char* ip,char* port){
 }
 
 
-void* connect_to_node(node* current){
+void* connect_to_node(void* currentv){
+    node* current = (node* )currentv;
     char buff[BUFF_SIZE];  
     struct sockaddr_in servaddr;
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);   
@@ -79,6 +90,12 @@ void* connect_to_node(node* current){
     servaddr.sin_port = htons(conn_port);
            
     if (connect(sock_fd,(struct sockaddr*)&servaddr,sizeof(servaddr))==-1){
+        node* inlist = node_in_list(current->ip,current->port);
+        if (inlist!=NULL){
+            printf("node deleted %s\n",current->name);
+            array_list_remove(nodes,inlist);
+        
+        }
         return;
     }
 
@@ -120,117 +137,115 @@ void* syncing(){
         for (int i = array_list_iter(nodes);i!=-1;i = array_list_next(nodes,i)){    
             pthread_t conn_thread;
             node* current = array_list_get(nodes,i);
-            connect_to_node(current);
+            pthread_create(&conn_thread,NULL,connect_to_node,(void*)current);
+            //connect_to_node(current);
         }
         sleep(5);   
     }
 }   
 
-node* node_in_list(char* ip,char *port){
-    for (int i = array_list_iter(nodes);i!=-1;i=array_list_next(nodes,i)){
-        node* current = array_list_get(nodes,i);
-        if (strcmp(ip,current->ip)==0 & strcmp(port,current->port)==0)
-            return current;
+
+void process_request(void *data){
+    char buff[BUFF_SIZE];
+    int comm_sock_fd = *(int*)data;
+    int n = read(comm_sock_fd,buff,BUFF_SIZE);
+    buff[n] = '\0';
+    //printf("Got new message: %s \n",buff);
+    if (strcmp(buff,SYNC)==0){
+        //printf("==Starting to sync\n");
+        n = read(comm_sock_fd,buff,BUFF_SIZE);
+        //printf("==Received %s\n",buff);
+        char* name = strtok(buff,":");
+        char* ip = strtok(NULL,":");
+        char* port = strtok(NULL, ":");
+        char* files = strtok(NULL,":");
+        node* new = node_in_list(ip,port);
+        if (new == NULL){
+            //printf("==New received node:%s %s\n",ip,port);
+            new = create_node(name,ip,port);
+            array_list_add(nodes,new);
+        }
+        else{
+            array_list_free_all(new->files);  
+        }
+        //printf("==Got files:%s\n",files);
+        char* file = strtok(files,",");
+            
+        while (file!=NULL){
+            char* new_file = malloc(strlen(file));
+            strcpy(new_file,file);
+            array_list_add(new->files,new_file);
+            strcpy(new_file,file);
+            file = strtok(NULL,",");
+        } 
+
+        n = read(comm_sock_fd,buff,BUFF_SIZE);
+
+        //printf("==Received %s\n",buff);
+        int count;sscanf(buff,"%d",&count);
+        for (int i = 0;i<count;i++){
+            n = read(comm_sock_fd,buff,BUFF_SIZE);
+
+            //printf("==Received node:%s\n",buff);
+            char* name = strtok(buff,":");
+            char* ip = strtok(NULL,":");
+            char* port = strtok(NULL, ":");
+            node* new = node_in_list(ip,port);
+            if (new == NULL){
+                array_list_add(nodes,create_node(name,ip,port));
+                //printf("New node added from db:%s %s\n",ip,port);
+            }
+        }
     }
-    return NULL;
+    else if (strcmp(buff,REQUEST)==0){
+        printf("Download Request\n");
+        read(comm_sock_fd,buff,BUFF_SIZE);
+        printf("File name:%s\n",buff);
+        p_array_list temp_list = create_array_list(10);
+        get_file_names(temp_list);
+        for (int i = array_list_iter(temp_list); i!=-1; i = array_list_next(temp_list, i)){
+            char* cur_file = array_list_get(temp_list,i);
+            if (strcmp(cur_file,buff)==0){
+                char text[FILE_SIZE];
+                text[0] = '\0';
+                int st = read_file_to_buffer(cur_file,text);
+                if (st == -1){
+                    printf("File not found\n");
+                    write(comm_sock_fd,"-1",BUFF_SIZE);
+                    break;
+                }
+                int count_of_words = 1;
+                //Assume file is in following format: [word1_word2_word3_word4]
+                
+                for (int j = 0;j<strlen(text);j++){
+                    if (text[j] == ' ' )
+                        count_of_words+=1;
+                }
+                printf("Number of words in file: %d\n",count_of_words);
+                sprintf(buff,"%d",count_of_words);
+                write(comm_sock_fd,buff,BUFF_SIZE);
+                char* word = strtok(text," ");
+                while (word!=NULL){
+                    write(comm_sock_fd,word,BUFF_SIZE);
+                    word = strtok(NULL," ");
+                }
+            }
+        }
+    }
+    close(comm_sock_fd);
 }
 
 void* tcp_listen(){
     struct sockaddr_in cliaddr;
     int addr_len = sizeof(cliaddr);
-    char buff[BUFF_SIZE];
     while (1){
         int comm_sock_fd = accept(main_sock,(struct sockaddr *) &cliaddr, &addr_len);
         if (comm_sock_fd == -1){
             printf("Accept");
             continue;
         }
-        int n = read(comm_sock_fd,buff,BUFF_SIZE);
-        buff[n] = '\0';
-        //printf("Got new message: %s \n",buff);
-        if (strcmp(buff,SYNC)==0){
-            //printf("==Starting to sync\n");
-            n = read(comm_sock_fd,buff,BUFF_SIZE);
-            //printf("==Received %s\n",buff);
-            char* name = strtok(buff,":");
-            char* ip = strtok(NULL,":");
-            char* port = strtok(NULL, ":");
-            char* files = strtok(NULL,":");
-            node* new = node_in_list(ip,port);
-            if (new == NULL){
-                //printf("==New received node:%s %s\n",ip,port);
-                new = create_node(name,ip,port);
-                array_list_add(nodes,new);
-            }
-            else{
-                array_list_free_all(new->files);  
-            }
-            //printf("==Got files:%s\n",files);
-            char* file = strtok(files,",");
-              
-            while (file!=NULL){
-                char* new_file = malloc(strlen(file));
-                strcpy(new_file,file);
-                array_list_add(new->files,new_file);
-                strcpy(new_file,file);
-                file = strtok(NULL,",");
-            } 
-
-            n = read(comm_sock_fd,buff,BUFF_SIZE);
-
-            //printf("==Received %s\n",buff);
-            int count;sscanf(buff,"%d",&count);
-            for (int i = 0;i<count;i++){
-                n = read(comm_sock_fd,buff,BUFF_SIZE);
-
-                //printf("==Received node:%s\n",buff);
-                char* name = strtok(buff,":");
-                char* ip = strtok(NULL,":");
-                char* port = strtok(NULL, ":");
-                node* new = node_in_list(ip,port);
-                if (new == NULL){
-                    array_list_add(nodes,create_node(name,ip,port));
-                    //printf("New node added from db:%s %s\n",ip,port);
-                }
-            }
-        }
-        else if (strcmp(buff,REQUEST)==0){
-            printf("Download Request\n");
-            read(comm_sock_fd,buff,BUFF_SIZE);
-            printf("File name:%s\n",buff);
-            p_array_list temp_list = create_array_list(10);
-            get_file_names(temp_list);
-            for (int i = array_list_iter(temp_list); i!=-1; i = array_list_next(temp_list, i)){
-                char* cur_file = array_list_get(temp_list,i);
-                if (strcmp(cur_file,buff)==0){
-                    char text[FILE_SIZE];
-                    text[0] = '\0';
-                    int st = read_file_to_buffer(cur_file,text);
-                    if (st == -1){
-                        write(comm_sock_fd,"-1",BUFF_SIZE);
-                        break;
-                    }
-                    printf("File found in DB:%s\n",cur_file);
-                    int count_of_words = 1;
-                    //Assume file is in following format: [word1_word2_word3_word4]
-                    
-                    for (int j = 0;j<strlen(text);j++){
-                        if (text[j] == ' ' )
-                            count_of_words+=1;
-                    }
-                    printf("File source: %s\n",text);
-                    sprintf(buff,"%d",count_of_words);
-                    write(comm_sock_fd,buff,BUFF_SIZE);
-                    char* word = strtok(text," ");
-                    while (word!=NULL){
-                        printf("Sent new word: %s\n",word);
-                        write(comm_sock_fd,word,BUFF_SIZE);
-                        word = strtok(NULL," ");
-                    }
-                }
-            }
-        }
-        close(comm_sock_fd);
+        pthread_t new_conn;
+        pthread_create(&new_conn,NULL,process_request,(void*)&comm_sock_fd);
         sleep(1);
     }
 }
@@ -296,6 +311,7 @@ void* download(char* file){
         node* current = (node* ) array_list_get(nodes,i);
         if (strcmp(current->name,me.name)==0)
             continue;
+
         for (int j = array_list_iter(current->files); j!=-1; j = array_list_next(current->files,j)){
             char* nfile = (char* ) array_list_get(current->files,j);
             if (strcmp(nfile,file)==0){
@@ -346,8 +362,8 @@ void init(){
     nodes = create_array_list(10);
     printf("Enter name of the node:");
     scanf("%s",me.name);
-    //printf("Enter ip address of some network you connected to (tryna use IFCONFIG):");
-    //scanf("%s",me.ip);
+    printf("Enter ip address of some network you connected to (tryna use IFCONFIG):");
+    scanf("%s",me.ip);
     strcpy(me.ip,"127.0.0.1");
     init_main_socket();
     printf("Port you've been assigned to is:%s\n",me.port);
@@ -361,8 +377,8 @@ void init(){
     if (answer == 'n') {
         char ip[IP_PORT_SIZE] = "127.0.0.1";
         char port[IP_PORT_SIZE];
-        //printf("Enter ip address of existing node:");
-        //scanf("%s",ip);
+        printf("Enter ip address of existing node:");
+        scanf("%s",ip);
         printf("Enter port address of existing node:");
         scanf("%s",port);
         node* new_node = create_node("F",ip,port);
@@ -378,6 +394,7 @@ int main(){
 
     pthread_create(&send_sync_thread, NULL, syncing, NULL);
     pthread_create(&get_sync_and_req_thread,NULL, tcp_listen, NULL);
+    printf("===[Background Syncing]===\n");
     ask_download();
     pthread_join(get_sync_and_req_thread, NULL);
 
