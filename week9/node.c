@@ -117,8 +117,8 @@ void* connect_to_node(void* currentv){
     write(sock_fd,buff,BUFF_SIZE);
 
     buff[0] = '\0';
-    sprintf(buff,"%ld",nodes->count);
-    write(sock_fd,buff,BUFF_SIZE);            
+    //sprintf(buff,"%ld",nodes->count);
+    write(sock_fd,&nodes->count,sizeof(int));            
     //printf("=Sending %s\n",buff);
     for (int j = array_list_iter(nodes);j!=-1;j=array_list_next(nodes,j)){
         node* cur = array_list_get(nodes,j);
@@ -180,11 +180,11 @@ void process_request(void *data){
             strcpy(new_file,file);
             file = strtok(NULL,",");
         } 
-
-        n = read(comm_sock_fd,buff,BUFF_SIZE);
+        int count;
+        n = read(comm_sock_fd,&count,sizeof(int));
 
         //printf("==Received %s\n",buff);
-        int count;sscanf(buff,"%d",&count);
+        //int count;sscanf(buff,"%d",&count);
         for (int i = 0;i<count;i++){
             n = read(comm_sock_fd,buff,BUFF_SIZE);
 
