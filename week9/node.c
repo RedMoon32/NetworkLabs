@@ -20,9 +20,10 @@
 
 #define FILE_SIZE 2048
 #define BUFF_SIZE 1024
-#define SYNC "1"
-#define REQUEST "0"
 
+
+int SYNC = 1;
+int REQUEST = 0;
 
 typedef struct Node{
     char name[NODE_NAME_SIZE];
@@ -98,8 +99,8 @@ void* connect_to_node(void* currentv){
         }
         return;
     }
-
-    write(sock_fd,SYNC,BUFF_SIZE);
+    
+    write(sock_fd,&SYNC,sizeof(int));
 
     //printf("=Sending %s\n",SYNC);
     buff[0]='\0';
@@ -148,10 +149,11 @@ void* syncing(){
 void process_request(void *data){
     char buff[BUFF_SIZE];
     int comm_sock_fd = *(int*)data;
-    int n = read(comm_sock_fd,buff,BUFF_SIZE);
+    int status;
+    int n = read(comm_sock_fd,&status,sizeof(int));
     buff[n] = '\0';
     //printf("Got new message: %s \n",buff);
-    if (strcmp(buff,SYNC)==0){
+    if (status==SYNC){
         //printf("==Starting to sync\n");
         n = read(comm_sock_fd,buff,BUFF_SIZE);
         //printf("==Received %s\n",buff);
@@ -197,7 +199,7 @@ void process_request(void *data){
             }
         }
     }
-    else if (strcmp(buff,REQUEST)==0){
+    else if (status==REQUEST){
         printf("Download Request\n");
         read(comm_sock_fd,buff,BUFF_SIZE);
         printf("File name:%s\n",buff);
@@ -223,7 +225,7 @@ void process_request(void *data){
                 }
                 printf("Number of words in file: %d\n",count_of_words);
                 sprintf(buff,"%d",count_of_words);
-                write(comm_sock_fd,buff,BUFF_SIZE);
+                write(comm_sock_fd,&count_of_words,sizeof(int));
                 char* word = strtok(text," ");
                 while (word!=NULL){
                     write(comm_sock_fd,word,BUFF_SIZE);
@@ -282,11 +284,12 @@ void download_from(node* server, char *file){
     }
     char buff[BUFF_SIZE];
     strcpy(buff,file);
-    write(sock_fd,REQUEST,BUFF_SIZE);
+    write(sock_fd,&REQUEST,sizeof(int));
     write(sock_fd,buff,BUFF_SIZE);
-    read(sock_fd,buff,BUFF_SIZE);
     int count_of_words;
-    sscanf(buff,"%d",&count_of_words);
+    read(sock_fd,&count_of_words,sizeof(int));
+    
+    //sscanf(buff,"%d",&count_of_words);
     printf("Count of words to receive - %d\n",count_of_words);
    
     if (count_of_words == -1){
@@ -364,7 +367,6 @@ void init(){
     scanf("%s",me.name);
     printf("Enter ip address of some network you connected to (tryna use IFCONFIG):");
     scanf("%s",me.ip);
-    strcpy(me.ip,"127.0.0.1");
     init_main_socket();
     printf("Port you've been assigned to is:%s\n",me.port);
     char answer = '0';
