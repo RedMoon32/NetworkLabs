@@ -130,6 +130,7 @@ void* connect_to_node(void* currentv){
     }
     close(sock_fd);
 }
+
 void* syncing(){                                                                          
     while (1){
         array_list_free_all(me.files);
