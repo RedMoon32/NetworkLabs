@@ -22,7 +22,7 @@
 
 #define FILE_SIZE 2048
 #define BUFF_SIZE 1024
-#define MAX_NUMBER_OF_REQUESTS 10
+#define MAX_NUMBER_OF_REQUESTS 3
 #define BLOCKED -100
 
 int SYNC = 1;
@@ -44,6 +44,33 @@ typedef struct Con_Info{
 p_array_list nodes;
 node me;
 int main_sock;
+pthread_mutex_t count_mutex;
+
+void increment_count(char *key,int inc)
+{
+	pthread_mutex_lock(&count_mutex);
+    int *count = map_get(&map,key);
+    if (*count !=BLOCKED)
+        *count = *count + inc;
+	pthread_mutex_unlock(&count_mutex);
+}
+
+int* get_count(char *key)
+{
+    int *count;
+    pthread_mutex_lock(&count_mutex);
+	count = map_get(&map,key);
+    pthread_mutex_unlock(&count_mutex);
+	return count;
+}
+
+void set_blocked(char *key){
+    int *count;
+    pthread_mutex_lock(&count_mutex);
+	count = map_get(&map,key);
+    *count = BLOCKED;
+    pthread_mutex_unlock(&count_mutex);
+}
 
 node* node_in_list(char* ip,char *port){
     for (int i = array_list_iter(nodes);i!=-1;i=array_list_next(nodes,i)){
@@ -85,12 +112,13 @@ node* create_node(char* name,char* ip,char* port){
 
 void* connect_to_node(void* currentv){
     node* current = (node* )currentv;
-    printf("Connecting to %s node\n",current->port);
+    
     char buff[BUFF_SIZE];  
     struct sockaddr_in servaddr;
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);   
     if (strcmp(current->ip,me.ip)==0&strcmp(current->port,me.port)==0)
         return;
+    printf("Connecting to %s node\n",current->port);
     memset(&servaddr, 0, sizeof(servaddr));
     
     servaddr.sin_addr.s_addr = inet_addr(current->ip);
@@ -155,13 +183,12 @@ void* syncing(){
 }   
 
 int check_close(int n,con_info *data){
-    printf("Number of bytes received:%d\n",n);
+    //printf("Number of bytes received:%d\n",n);
     if (n==-1||n==0){
             close(data->comm_sock_fd);
-            int *con_count = map_get(&map,data->key);
-            *con_count-=1;
+            increment_count(data->key,-1);
             free(data);
-            printf("Unexpected close\n");
+            //printf("Unexpected close\n");
             return 1;
     }
     return 0;
@@ -173,11 +200,12 @@ void process_request(con_info *data){
     int status;
     int n = read(comm_sock_fd,&status,sizeof(int));
     int *con_count;
-    check_close(n,data);
-    printf("New ping processing\n");
+    if (check_close(n,data)) return ;
+    //sleep(10);
+    printf("New connection processing\n");
     //printf("Got new message: %d \n",status);
     if (status==SYNC){
-        //printf("==Starting to sync\n");
+        printf("Sync Request\n");
         n = read(comm_sock_fd,buff,BUFF_SIZE);
         if (check_close(n,data)) return ;
         //printf("==Received %s\n",buff);
@@ -225,9 +253,10 @@ void process_request(con_info *data){
         //int *con_count = map_get(&map,inet_ntoa())
     }
     else if (status==REQUEST){
-        printf("Download Request\n");
+        
         n = read(comm_sock_fd,buff,BUFF_SIZE);
         if (check_close(n,data)) return ;
+        printf("Download Request\n");
         printf("File name:%s\n",buff);
         p_array_list temp_list = create_array_list(10);
         get_file_names(temp_list);
@@ -260,9 +289,11 @@ void process_request(con_info *data){
             }
         }
     }
+    
     close(comm_sock_fd);
-    con_count = map_get(&map,data->key);
-    *con_count-=1;
+    //con_count = map_get(&map,data->key);
+    //*con_count-=1;
+    increment_count(data->key,-1);
     free(data);
     printf("Ping succ. processesd\n");
 }
@@ -278,22 +309,21 @@ void* tcp_listen(){
         }
 
         char *key = inet_ntoa(cliaddr.sin_addr);
-        int *con_count = map_get(&map,key);
-        
+        int* con_count = get_count(key);
         if (con_count){
-            printf("%d con_count from %s\n",*con_count,key);
-            if (*con_count == BLOCKED){
+            if (*con_count <= BLOCKED){
+                //printf("Denied - %s was blocked\n",key);
                 close(comm_sock_fd);
                 continue;
             }
-            else if (*con_count > MAX_NUMBER_OF_REQUESTS){
-                *con_count = BLOCKED;
-                close(comm_sock_fd);
-                printf("%s was blocked\n",key);
+            else if (*con_count+1 > MAX_NUMBER_OF_REQUESTS){
+                set_blocked(key);
+                printf("Denied - %s was blocked - number of simultaneous connections exceed %d\n",key,MAX_NUMBER_OF_REQUESTS);
                 continue;
             }
             else{
-                *con_count += 1;
+                increment_count(key,1);
+                printf("%s was allowed - number of simultaneous connections is %d\n",key,*get_count(key));
             }
         }
         else{
@@ -305,8 +335,7 @@ void* tcp_listen(){
         c->comm_sock_fd = comm_sock_fd;
         pthread_t new_conn;
         pthread_create(&new_conn,NULL,process_request,(void*)c);
-        printf("Starting to process request\n");
-        sleep(1);
+        //printf("Starting to process request\n");
     }
 }
 
@@ -423,13 +452,15 @@ void init(){
     nodes = create_array_list(10);
     printf("Enter name of the node:");
     scanf("%s",me.name);
-    //printf("Enter ip address of some network you connected to (tryna use IFCONFIG):");
-    //scanf("%s",me.ip);
-    strcpy(me.ip,"127.0.0.1");
+    strcpy(me.name,"vm1");
+    printf("Enter ip address of some network you connected to (tryna use IFCONFIG):");
+    scanf("%s",me.ip);
+    //strcpy(me.ip,"127.0.0.1");
     init_main_socket();
     printf("Port you've been assigned to is:%s\n",me.port);
-    char answer = '0';
+    char answer = 'n';
     printf("Are you first node in network? [y/n]:");
+    
     node* me_l = malloc(sizeof(node));
     memcpy(me_l,&me,sizeof(node));
     array_list_add(nodes,me_l);
@@ -438,8 +469,8 @@ void init(){
     if (answer == 'n') {
         char ip[IP_PORT_SIZE] = "127.0.0.1";
         char port[IP_PORT_SIZE];
-        //printf("Enter ip address of existing node:");
-        //scanf("%s",ip);
+        printf("Enter ip address of existing node:");
+        scanf("%s",ip);
         printf("Enter port address of existing node:");
         scanf("%s",port);
         node* new_node = create_node("F",ip,port);
@@ -456,7 +487,7 @@ int main(){
     pthread_create(&send_sync_thread, NULL, syncing, NULL);
     pthread_create(&get_sync_and_req_thread,NULL, tcp_listen, NULL);
     printf("===[Background Syncing]===\n");
-    //ask_download();
+    ask_download();
     pthread_join(get_sync_and_req_thread, NULL);
 
 }
